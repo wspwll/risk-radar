@@ -1,9 +1,3 @@
-#root {
-  transform: scale(1.2); /* Scale UI to 120% */
-  transform-origin: top center; /* Keep centered & aligned from top */
-  width: calc(100% / 1.2); /* Prevent horizontal overflow */
-}
-
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
@@ -16,4 +10,20 @@ body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
     monospace;
+}
+
+/* Prevent horizontal scroll/white gutter */
+html,
+body {
+  overflow-x: hidden;
+}
+
+/* Center the scaled app without extra margins */
+#root {
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%) scale(1.2); /* 120% zoom equivalent */
+  transform-origin: top center;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
