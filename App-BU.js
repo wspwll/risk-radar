@@ -259,11 +259,11 @@ function getQuarterKey(iso) {
   const d = new Date(iso);
   if (isNaN(d)) return "";
   const y = d.getFullYear();
-  const q = Math.floor(d.getMonth() / 3) + 1;
+  const q = Math.floor(d.getMonth() / 3) + 1; // 0-2 → Q1, 3-5 → Q2, etc.
   return `${y}-Q${q}`;
 }
 
-/* DATA - RISKS */
+/* ---------- Data shape for risks ---------- */
 function makeEmptyRisk() {
   return {
     id: uid(),
@@ -822,7 +822,7 @@ export default function App() {
   const yMid = useMemo(() => {
     const impacts = rows.map((r) => Number(r.totalImpact) || 0);
     const yMax = Math.max(0, ...impacts);
-    return (0 + yMax) / 2;
+    return (0 + yMax) / 2; // beginAtZero is true → yMin = 0
   }, [rows]);
 
   const pctChangeByRowId = useMemo(() => {
@@ -855,14 +855,14 @@ export default function App() {
       if (!latestCurrent) return;
 
       const latestIdx = list.findIndex((x) => x.id === latestCurrent.id);
-      if (latestIdx <= 0) return;
+      if (latestIdx <= 0) return; // no previous record
 
       const prev = list[latestIdx - 1];
       const latestImpact = Number(latestCurrent.totalImpact) || 0;
       const prevImpact = Number(prev.totalImpact) || 0;
 
       if (prevImpact === 0) {
-        out.set(latestCurrent.id, null);
+        out.set(latestCurrent.id, null); // undefined %
       } else {
         const pct = ((latestImpact - prevImpact) / prevImpact) * 100;
         out.set(latestCurrent.id, pct);
@@ -1078,7 +1078,7 @@ export default function App() {
     [dark]
   );
 
-  /* QUADRANT COLORS */
+  /* ---------- Quadrant background shading plugin (robust first paint) ---------- */
   const scatterQuadrantPlugin = useMemo(
     () => ({
       id: "scatterQuadrants",
@@ -1090,11 +1090,13 @@ export default function App() {
         const yScale = scales?.y;
         if (!xScale || !yScale) return;
 
+        // X midpoint (50% likelihood)
         const xMid = xScale.getPixelForValue(50);
         const xMidPx = Number.isFinite(xMid)
           ? xMid
           : (chartArea.left + chartArea.right) / 2;
 
+        // Y midpoint: prefer scale domain midpoint; fallback to pixel midpoint
         const yDataMid =
           Number.isFinite(yScale.min) && Number.isFinite(yScale.max)
             ? (yScale.min + yScale.max) / 2
@@ -1111,6 +1113,7 @@ export default function App() {
 
         ctx.save();
 
+        // Colors (20% opacity)
         const yellow = "rgba(255, 215, 0, 0.20)"; // Top-left
         const green = "rgba(34, 197, 94, 0.20)"; // Bottom-left
         const red = "rgba(239, 68, 68, 0.20)"; // Top-right
@@ -1155,7 +1158,7 @@ export default function App() {
     []
   );
 
-  /* DATE ICON COLOR */
+  /* ---------- Dynamic CSS for date icon color ---------- */
   const datePickerFilter = dark ? "invert(1) brightness(2)" : "invert(0)";
   const dateInputStyle = `
     /* Date picker icon tinting */
@@ -1371,7 +1374,7 @@ export default function App() {
             </h3>
 
             <div style={{ display: "grid", gap: 8 }}>
-              {/* LOW */}
+              {/* LOW — No concern */}
               <div
                 style={{
                   display: "flex",
@@ -1387,7 +1390,7 @@ export default function App() {
                 <strong>{quadrantCounts.low}</strong>
               </div>
 
-              {/* MEDIUM */}
+              {/* MEDIUM — Some concern */}
               <div
                 style={{
                   display: "flex",
@@ -1405,7 +1408,7 @@ export default function App() {
                 <strong>{quadrantCounts.medium}</strong>
               </div>
 
-              {/* HIGH */}
+              {/* HIGH — Definitely concerned */}
               <div
                 style={{
                   display: "flex",
@@ -1423,7 +1426,7 @@ export default function App() {
                 <strong>{quadrantCounts.high}</strong>
               </div>
 
-              {/* CRITICAL */}
+              {/* CRITICAL — Highly concerned */}
               <div
                 style={{
                   display: "flex",
@@ -1588,7 +1591,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Rename Snapshot */}
+            {/* Rename Snapshot dialog */}
             {isRenameDialogOpen && (
               <div
                 style={{
@@ -1628,7 +1631,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Delete */}
+            {/* Custom delete modal */}
             {isDeleteDialogOpen && (
               <div style={styles.modalOverlay}>
                 <div style={styles.modalCard(dark)}>
@@ -1672,7 +1675,7 @@ export default function App() {
             <div style={{ overflowX: "auto" }}>
               <table style={styles.table}>
                 <colgroup>
-                  <col style={{ width: 90 }} /> {/* %Δ */}
+                  <col style={{ width: 90 }} /> {/* %Δ (latest vs previous) */}
                   <col style={{ width: "40%" }} /> {/* Risk Name */}
                   <col style={{ width: 120 }} /> {/* Total Impact */}
                   <col style={{ width: 90 }} /> {/* Likelihood */}
@@ -1711,6 +1714,7 @@ export default function App() {
                   {rows.map((row) => (
                     <React.Fragment key={row.id}>
                       <tr>
+                        {/* NEW: %Δ (latest vs previous Total Impact, only on most recent row per Risk Name) */}
                         <td
                           style={{
                             ...styles.td(dark),
@@ -1720,8 +1724,8 @@ export default function App() {
                         >
                           {(() => {
                             const pct = pctChangeByRowId.get(row.id);
-                            if (pct === undefined) return "";
-                            if (pct === null) return "";
+                            if (pct === undefined) return ""; // not the latest row or no history
+                            if (pct === null) return ""; // previous impact == 0 → undefined %
                             const up = pct > 0;
                             const down = pct < 0;
                             const color = up
@@ -1797,7 +1801,7 @@ export default function App() {
                           />
                         </td>
 
-                        {/* 5) Risk by Likelihood */}
+                        {/* 5) Risk by Likelihood (computed, read-only, currency) */}
                         <td style={{ ...styles.td(dark), textAlign: "right" }}>
                           {(() => {
                             const val = calcRiskByLikelihood(row);
@@ -1811,7 +1815,7 @@ export default function App() {
                           })()}
                         </td>
 
-                        {/* 6) Impact Years */}
+                        {/* 7) Impact Years */}
                         <td style={styles.td(dark)}>
                           <input
                             type="text"
@@ -1828,7 +1832,7 @@ export default function App() {
                           />
                         </td>
 
-                        {/* 7) Details column */}
+                        {/* 8) Details column */}
                         <td style={{ ...styles.td(dark), textAlign: "right" }}>
                           <button
                             style={styles.button(dark)}
@@ -1841,7 +1845,7 @@ export default function App() {
                           </button>
                         </td>
 
-                        {/* 8) Actions */}
+                        {/* 9) Actions */}
                         <td style={styles.td(dark)}>
                           <div style={styles.rowActions}>
                             <button
@@ -1868,7 +1872,7 @@ export default function App() {
                         </td>
                       </tr>
 
-                      {/* Details panel row */}
+                      {/* Details panel row (only when expanded) */}
                       {detailsId === row.id && (
                         <tr>
                           <td style={styles.td(dark)} colSpan={8}>
@@ -2005,8 +2009,8 @@ export default function App() {
                     <tr>
                       <td style={styles.td(dark)} colSpan={8}>
                         <em>
-                          No rows. Click “Add Row” or check columns in imported
-                          data.
+                          No rows. Click “Add Row” or check columns in
+                          risk.xlsx.
                         </em>
                       </td>
                     </tr>
@@ -2017,7 +2021,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Scatterplot (left) + Details card (right) */}
+        {/* Scatterplot (left) + Details card (right) as two separate boxes */}
         <div
           style={{
             maxWidth: 980,
@@ -2260,6 +2264,7 @@ export default function App() {
           </div>
         </div>
       </div>{" "}
+      {/* ⬅️ THIS closes the outer <div style={styles.page(dark)}> */}
     </>
   );
 }
