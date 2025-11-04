@@ -242,6 +242,22 @@ function compactCurrency(n) {
   return `$${n.toFixed(0)}`;
 }
 
+function formatUSD(n) {
+  if (!Number.isFinite(Number(n))) return "";
+  return Number(n).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function parseUSD(str) {
+  if (typeof str === "number") return str;
+  const v = Number(String(str).replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(v) ? v : 0;
+}
+
+
 function formatPct(n) {
   if (!Number.isFinite(n)) return "—";
   const sign = n > 0 ? "+" : n < 0 ? "−" : "";
@@ -386,6 +402,15 @@ export default function App() {
 
   const [initialLoaded, setInitialLoaded] = useState(false);
 
+  const sortByDateAsc = (arr) =>
+    [...arr].sort((a, b) => {
+      const ta = new Date(a.dateAdded).getTime() || 0;
+      const tb = new Date(b.dateAdded).getTime() || 0;
+      if (ta !== tb) return ta - tb;
+      // optional stable tie-breaker:
+      return (a.riskName || "").localeCompare(b.riskName || "");
+    });
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -405,8 +430,11 @@ export default function App() {
           .filter(
             (r) => r.riskName || r.responsible || r.totalImpact || r.likelihood
           );
+
         if (!cancelled && normalized.length) {
-          setRows(normalized);
+          // >>> SORT BY DATE (oldest → newest) before setting rows <<<
+          const ordered = sortByDateAsc(normalized);
+          setRows(ordered);
           setLoadMsg("");
         } else if (!cancelled) {
           setLoadMsg("risk.xlsx loaded but contained no recognizable rows.");
@@ -661,7 +689,7 @@ export default function App() {
   }, [rows]);
 
   /* RISK BY LIKELIHOOD - QUARTERLY */
-  const { qLabels, qDatasets } = useMemo(() => {
+  const { qLabels, qDatasets, qYMin } = useMemo(() => {
     const sums = new Map();
 
     rows.forEach((r) => {
@@ -678,8 +706,18 @@ export default function App() {
     });
 
     const data = keys.map((k) => Math.round(sums.get(k)));
-
     const color = dark ? "#EF4444" : "#F97316";
+
+    // --- Dynamic min: pad 10% below the min, clamp at 0, and "nice" it down ---
+    const values = data.filter((v) => Number.isFinite(v));
+    const rawMin = values.length ? Math.min(...values) : 0;
+    const rawMax = values.length ? Math.max(...values) : 0;
+    const pad = Math.max(0, Math.round((rawMax - rawMin) * 0.10));
+    const proposedMin = Math.max(0, rawMin - pad);
+
+    // round down to a nice step (nearest power-of-10 multiple)
+    const step = proposedMin > 0 ? 10 ** Math.floor(Math.log10(proposedMin)) : 1;
+    const qYMin = proposedMin > 0 ? Math.floor(proposedMin / step) * step : 0;
 
     return {
       qLabels: keys,
@@ -695,8 +733,10 @@ export default function App() {
           pointHoverRadius: 8,
         },
       ],
+      qYMin,
     };
   }, [rows, dark]);
+
 
   const chartOptions = useMemo(
     () => ({
@@ -758,24 +798,19 @@ export default function App() {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: {
-          display: false,
-        },
+        legend: { display: false },
         tooltip: {
           displayColors: false,
           titleColor: dark ? "#e5e7eb" : "#0b1220",
           bodyColor: dark ? "#e5e7eb" : "#0b1220",
-          backgroundColor: dark
-            ? "rgba(17,24,39,0.9)"
-            : "rgba(255,255,255,0.95)",
+          backgroundColor: dark ? "rgba(17,24,39,0.9)" : "rgba(255,255,255,0.95)",
           borderColor: dark ? "#374151" : "#e5e7eb",
           borderWidth: 1,
           callbacks: {
             title: (ctx) => ctx[0]?.label || "",
             label: (ctx) => {
               const val = Number(ctx.parsed.y ?? 0);
-              if (val >= 1_000_000_000)
-                return `$${(val / 1_000_000_000).toFixed(1)}B`;
+              if (val >= 1_000_000_000) return `$${(val / 1_000_000_000).toFixed(1)}B`;
               if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`;
               if (val >= 1_000) return `$${(val / 1_000).toFixed(1)}K`;
               return `$${val.toFixed(0)}`;
@@ -786,38 +821,30 @@ export default function App() {
       scales: {
         x: {
           ticks: { color: dark ? "#e5e7eb" : "#0b1220" },
-          grid: {
-            color: dark ? "rgba(148,163,184,0.2)" : "rgba(148,163,184,0.25)",
-          },
-          title: {
-            display: false,
-          },
+          grid: { color: dark ? "rgba(148,163,184,0.2)" : "rgba(148,163,184,0.25)" },
+          title: { display: false },
         },
         y: {
-          beginAtZero: true,
+          beginAtZero: false,          // <-- allow dynamic min
+          min: qYMin,                  // <-- dynamic minimum
           ticks: {
             color: dark ? "#e5e7eb" : "#0b1220",
             callback: (v) => {
               const num = Number(v);
-              if (num >= 1_000_000_000)
-                return `$${(num / 1_000_000_000).toFixed(1)}B`;
+              if (num >= 1_000_000_000) return `$${(num / 1_000_000_000).toFixed(1)}B`;
               if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(0)}M`;
               if (num >= 1_000) return `$${(num / 1_000).toFixed(1)}K`;
               return `$${num.toFixed(0)}`;
             },
           },
-
-          grid: {
-            color: dark ? "rgba(148,163,184,0.2)" : "rgba(148,163,184,0.25)",
-          },
-          title: {
-            display: false,
-          },
+          grid: { color: dark ? "rgba(148,163,184,0.2)" : "rgba(148,163,184,0.25)" },
+          title: { display: false },
         },
       },
     }),
-    [dark]
+    [dark, qYMin]
   );
+
 
   const yMid = useMemo(() => {
     const impacts = rows.map((r) => Number(r.totalImpact) || 0);
@@ -1759,16 +1786,17 @@ export default function App() {
                         {/* 3) Total Impact ($) */}
                         <td style={styles.td(dark)}>
                           <input
-                            type="number"
-                            value={row.totalImpact}
+                            type="text"
+                            inputMode="numeric"
+                            value={formatUSD(row.totalImpact)}
                             onChange={(e) =>
-                              updateCell(row.id, "totalImpact", e.target.value)
+                              updateCell(row.id, "totalImpact", parseUSD(e.target.value))
                             }
-                            style={{ ...styles.numericInput(dark), width: 100 }}
-                            step="1"
-                            min="0"
+                            onFocus={(e) => e.target.select()}
+                            style={{ ...styles.numericInput(dark), width: 120, textAlign: "right" }}
                           />
                         </td>
+
 
                         {/* 4) Likelihood (%) */}
                         <td
